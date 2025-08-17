@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Monthly Calendar with Weekly & Monthly Totals</title>
 <style>
     body {
@@ -26,8 +26,7 @@
     .main-content { flex: 1; padding: 20px; }
     .calendar {
         display: grid;
-        /* 7 days + gap + week total + month total */
-        grid-template-columns: repeat(7, 1fr) 1in 1fr 1fr; 
+        grid-template-columns: repeat(7, 1fr) 1in 1fr 1fr;
         gap: 10px;
         max-width: 1150px;
         align-items: stretch;
@@ -46,9 +45,9 @@
         position: relative;
         background: #fff;
         display: flex;
-        justify-content: center;   /* center horizontally */
-        align-items: center;       /* center vertically */
-        flex-direction: column;    /* stack number above note */
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
         padding: 10px;
     }
     .day-number {
@@ -58,11 +57,16 @@
         font-size: 10px;
         font-weight: bold;
     }
-    /* Centered note value style */
     .note {
-        font-size: 18px;   /* big text */
-        font-weight: bold; /* bold */
-        color: black;      /* changed to black */
+        font-size: 18px;
+        font-weight: bold;
+        color: black;
+    }
+    .trades {
+        position: absolute;
+        bottom: 2px;
+        font-size: 10px;
+        color: #333;
     }
     .total-box {
         border: 2px solid #000;
@@ -83,18 +87,19 @@
         padding: 20px;
         border: 1px solid #ccc;
         box-shadow: 0 0 10px rgba(0,0,0,0.5);
+        width: 300px;
     }
-    /* Add Note modal text styling */
     #noteModal h3 {
         font-size: 20px;
         font-weight: bold;
         margin-bottom: 10px;
     }
-    #noteModal textarea {
+    #noteModal input {
         font-size: 16px;
         font-weight: bold;
         width: 100%;
         padding: 8px;
+        margin-bottom: 8px;
         box-sizing: border-box;
     }
     .positive { background-color: lightgreen !important; }
@@ -122,12 +127,18 @@
         <h1 id="month-title">Select a Month</h1>
         <div class="calendar" id="calendar"></div>
     </div>
+
+    <!-- MODAL -->
     <div id="noteModal">
         <h3>Add Note</h3>
-        <textarea id="noteText" rows="4" cols="30"></textarea><br><br>
+        <label>Amount:</label>
+        <input type="number" id="amountInput" placeholder="Enter amount" /><br />
+        <label>Number of Trades:</label>
+        <input type="number" id="tradesInput" placeholder="Enter trades" /><br />
         <button onclick="saveNote()">Save</button>
         <button onclick="closeModal()">Cancel</button>
     </div>
+
 <script>
 const calendar = document.getElementById("calendar");
 let selectedDay = null;
@@ -144,9 +155,9 @@ function loadMonth(month) {
     calendar.innerHTML = "";
     let total = 0;
     let weekTotal = 0;
-    let dayCounter = 0;
+    let dayCounter = firstDay; // Start count including empty cells offset
 
-    // HEADER ROW
+    // HEADER
     dayNames.forEach(day => {
         const headerDiv = document.createElement("div");
         headerDiv.classList.add("day-header");
@@ -156,50 +167,48 @@ function loadMonth(month) {
     const gapHeader = document.createElement("div");
     gapHeader.classList.add("gap-header");
     calendar.appendChild(gapHeader);
+
     const totalHeader = document.createElement("div");
     totalHeader.classList.add("day-header");
     totalHeader.textContent = "Week Total";
     calendar.appendChild(totalHeader);
-    // Monthly total header, single box
+
     const monthHeader = document.createElement("div");
     monthHeader.classList.add("day-header");
     monthHeader.id = "monthTotalHeader";
     monthHeader.textContent = "Month Total: 0";
     calendar.appendChild(monthHeader);
 
-    // Empty cells for days before first day
+    // Empty filler cells before first day
     for (let i = 0; i < firstDay; i++) {
         const emptyDiv = document.createElement("div");
         emptyDiv.classList.add("day");
         emptyDiv.style.visibility = "hidden";
         calendar.appendChild(emptyDiv);
-        dayCounter++;
     }
 
-    // Days
+    // Days loop
     for (let dayNum = 1; dayNum <= monthDays[month]; dayNum++) {
         const dayDiv = document.createElement("div");
         dayDiv.classList.add("day");
 
-        // Day number in top-left
         const dayNumSpan = document.createElement("span");
         dayNumSpan.classList.add("day-number");
         dayNumSpan.textContent = dayNum;
         dayDiv.appendChild(dayNumSpan);
 
-        // Click to open modal
         dayDiv.onclick = () => openModal(dayNum);
 
-        // Load saved note
         const noteKey = `note_${month}_${dayNum}`;
-        const savedNote = localStorage.getItem(noteKey);
-        if (savedNote) {
+        const savedData = JSON.parse(localStorage.getItem(noteKey) || "{}");
+
+        if (savedData.amount) {
             const noteSpan = document.createElement("span");
             noteSpan.classList.add("note");
-            noteSpan.textContent = savedNote;
+            noteSpan.textContent = savedData.amount;
             dayDiv.appendChild(noteSpan);
 
-            const noteValue = parseFloat(savedNote);
+            const noteValue = parseFloat(savedData.amount);
             if (!isNaN(noteValue)) {
                 weekTotal += noteValue;
                 total += noteValue;
@@ -208,22 +217,32 @@ function loadMonth(month) {
             }
         }
 
+        if (savedData.trades) {
+            const tradesSpan = document.createElement("span");
+            tradesSpan.classList.add("trades");
+            tradesSpan.textContent = `Trades: ${savedData.trades}`;
+            dayDiv.appendChild(tradesSpan);
+        }
+
         calendar.appendChild(dayDiv);
         dayCounter++;
 
-        if (dayCounter === 7 || dayNum === monthDays[month]) {
-            // Fill empty cells for incomplete week
-            if (dayCounter < 7) {
-                for (let e = dayCounter; e < 7; e++) {
+        // At the end of each week or month, insert totals
+        if (dayCounter % 7 === 0 || dayNum === monthDays[month]) {
+            // Fill any missing cells to complete last week
+            if (dayCounter % 7 !== 0) {
+                for (let e = dayCounter % 7; e < 7; e++) {
                     const emptyDiv = document.createElement("div");
                     emptyDiv.classList.add("day");
                     emptyDiv.style.visibility = "hidden";
                     calendar.appendChild(emptyDiv);
+                    dayCounter++;
                 }
             }
+
             // Gap column
-            const gapDiv = document.createElement("div");
-            calendar.appendChild(gapDiv);
+            calendar.appendChild(document.createElement("div"));
+
             // Weekly total box
             const totalBox = document.createElement("div");
             totalBox.classList.add("total-box");
@@ -232,12 +251,13 @@ function loadMonth(month) {
             else if (weekTotal < 0) totalBox.style.backgroundColor = "lightcoral";
             else totalBox.style.backgroundColor = "#fafafa";
             calendar.appendChild(totalBox);
+
             // Empty placeholder for month total
             const emptyMonthCell = document.createElement("div");
             emptyMonthCell.style.background = "transparent";
             calendar.appendChild(emptyMonthCell);
+
             weekTotal = 0;
-            dayCounter = 0;
         }
     }
 
@@ -251,14 +271,19 @@ function loadMonth(month) {
 
 function openModal(day) {
     selectedDay = day;
-    document.getElementById("noteText").value =
-        localStorage.getItem(`note_${selectedMonth}_${day}`) || "";
+    const savedData = JSON.parse(localStorage.getItem(`note_${selectedMonth}_${day}`) || "{}");
+    document.getElementById("amountInput").value = savedData.amount || "";
+    document.getElementById("tradesInput").value = savedData.trades || "";
     document.getElementById("noteModal").style.display = "block";
 }
 
 function saveNote() {
-    const note = document.getElementById("noteText").value;
-    localStorage.setItem(`note_${selectedMonth}_${selectedDay}`, note);
+    const amount = document.getElementById("amountInput").value;
+    const trades = document.getElementById("tradesInput").value;
+
+    const data = { amount, trades };
+    localStorage.setItem(`note_${selectedMonth}_${selectedDay}`, JSON.stringify(data));
+
     document.getElementById("noteModal").style.display = "none";
     loadMonth(selectedMonth);
 }
